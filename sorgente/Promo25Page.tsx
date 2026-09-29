@@ -599,10 +599,9 @@ export default function Promo25Page({ track, onLead }: Promo25PageProps) {
         </div>
       </section>
 
-      {/* ---------- chiusura: Miky nell'alone ---------- */}
+      {/* ---------- chiusura: Miky che si avvicina ---------- */}
       <section className="p25-chiusura">
-        <Anello nome="alone" className="p25-chiusura__video p25-chiusura__video--alto" />
-        <Anello nome="alone-largo" className="p25-chiusura__video p25-chiusura__video--largo" />
+        <Anello nome="chiavi" className="p25-chiusura__video" alt="Miky che si avvicina, con gli occhi accesi" />
         <div className="p25-chiusura__velo" aria-hidden="true" />
         <div className="p25-griglia p25-chiusura__dentro p25-entra">
           <h2 className="p25-h2">PROMO25 finisce giovedì 8 ottobre.</h2>
