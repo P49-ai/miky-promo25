@@ -35,13 +35,27 @@ export const CONFIG = {
     privacy: "/it/privacy",
   },
   asset: "/promo25",
+  /* true = il popup non si chiude senza lasciare i dati */
+  popupObbligatorio: false,
 };
 
 type Fase = "prima" | "attiva" | "finita";
 
+export type Lead = { nome: string; cognome: string; email: string; novita: boolean; origine: "popup" | "fondo" };
+
+const CHIAVE_LEAD = "p25_lead";
+const CHIAVE_SALTATO = "p25_saltato";
+function leggi(chiave: string, sessione = false) {
+  try { return (sessione ? sessionStorage : localStorage).getItem(chiave); } catch { return null; }
+}
+function scrivi(chiave: string, valore: string, sessione = false) {
+  try { (sessione ? sessionStorage : localStorage).setItem(chiave, valore); } catch { /* niente */ }
+}
+
 export type Promo25PageProps = {
   track?: (evento: string, dati?: Record<string, string>) => void;
-  onLead?: (dati: { contatto: string; tipo: "email" | "telefono"; novita: boolean }) => Promise<void>;
+  /* origine: "popup" (all'apertura) oppure "fondo" (modulo in fondo alla pagina) */
+  onLead?: (dati: Lead) => Promise<void>;
 };
 
 /* ---------------- TESTI ---------------- */
@@ -116,7 +130,7 @@ const DOMANDE = [
 
 /* ---------------- ICONE ---------------- */
 
-type IconaNome = "rimborso" | "calendario" | "pacco" | "lucchetto" | "spunta" | "play" | "freccia" | "posta" | "telefono";
+type IconaNome = "rimborso" | "calendario" | "pacco" | "lucchetto" | "spunta" | "play" | "freccia" | "posta" | "telefono" | "chiudi";
 
 function Icona({ nome }: { nome: IconaNome }) {
   const p: Record<IconaNome, ReactNode> = {
@@ -125,6 +139,7 @@ function Icona({ nome }: { nome: IconaNome }) {
     pacco: (<><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z" /><path d="M4 7.5l8 4.5 8-4.5M12 12v9" /></>),
     lucchetto: (<><rect x="5" y="10.5" width="14" height="10" rx="2.5" /><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" /><path d="M12 14.5v2.5" /></>),
     spunta: <path d="M5 12.5l4.5 4.5L19 7.5" />,
+    chiudi: <path d="M6 6l12 12M18 6L6 18" />,
     play: <path d="M8 5.5v13l11-6.5-11-6.5z" fill="currentColor" stroke="none" />,
     freccia: <path d="M5 12h14M13 6l6 6-6 6" />,
     posta: (<><rect x="3" y="5.5" width="18" height="13" rx="3" /><path d="M3.5 7l8.5 6 8.5-6" /></>),
@@ -159,9 +174,10 @@ function scomponi(ms: number) {
   return { g: Math.floor(s / 86400), h: Math.floor((s % 86400) / 3600), m: Math.floor((s % 3600) / 60), s: s % 60 };
 }
 
-function linkPagamento(posizione: string) {
+function linkPagamento(posizione: string, email?: string | null) {
   const sep = CONFIG.stripeLink.includes("?") ? "&" : "?";
-  return `${CONFIG.stripeLink}${sep}client_reference_id=promo25-${posizione}&utm_source=nfc&utm_medium=medaglia&utm_campaign=promo25`;
+  const mail = email ? `&prefilled_email=${encodeURIComponent(email)}` : "";
+  return `${CONFIG.stripeLink}${sep}client_reference_id=promo25-${posizione}${mail}&utm_source=nfc&utm_medium=medaglia&utm_campaign=promo25`;
 }
 
 /* Le sezioni salgono piano quando arrivano sullo schermo. */
@@ -284,6 +300,22 @@ export default function Promo25Page({ track, onLead }: Promo25PageProps) {
   const [toccato, setToccato] = useState(false);
   const galleria = useRef<HTMLDivElement>(null);
   const schermo = useRef<HTMLDivElement>(null);
+  const [lead, setLead] = useState<string | null>(null);
+  const [popup, setPopup] = useState(false);
+
+  /* Il popup si apre subito, una volta sola: non torna se hai già lasciato
+     i dati, e nella stessa visita non torna se l'hai chiuso. */
+  useEffect(() => {
+    const salvato = leggi(CHIAVE_LEAD);
+    if (salvato) { setLead(salvato); return; }
+    if (!CONFIG.popupObbligatorio && leggi(CHIAVE_SALTATO, true)) return;
+    const id = window.setTimeout(() => { setPopup(true); track?.("promo25_popup_vista"); }, 350);
+    return () => window.clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const registrato = (email: string) => { scrivi(CHIAVE_LEAD, email); setLead(email); };
+  const chiudiPopup = () => { scrivi(CHIAVE_SALTATO, "1", true); setPopup(false); track?.("promo25_popup_chiuso"); };
 
   useComparsa();
 
@@ -353,7 +385,7 @@ export default function Promo25Page({ track, onLead }: Promo25PageProps) {
 
   const Bottone = ({ posizione, piccolo }: { posizione: string; piccolo?: boolean }) =>
     attiva ? (
-      <a className={`p25-cta${piccolo ? " p25-cta--piccolo" : ""}`} href={linkPagamento(posizione)} onClick={clicPaga(posizione)} rel="noopener">
+      <a className={`p25-cta${piccolo ? " p25-cta--piccolo" : ""}`} href={linkPagamento(posizione, lead)} onClick={clicPaga(posizione)} rel="noopener">
         {piccolo ? "Preordina" : `Preordina a ${CONFIG.prezzoPromo}`}
         {!piccolo && <Icona nome="freccia" />}
       </a>
@@ -613,7 +645,16 @@ export default function Promo25Page({ track, onLead }: Promo25PageProps) {
         </div>
       </section>
 
-      <Contatto onLead={onLead} track={track} />
+      {!lead && <Contatto onLead={onLead} track={track} onFatto={registrato} />}
+
+      {popup && (
+        <Benvenuto
+          onLead={onLead}
+          track={track}
+          onFatto={(email) => { registrato(email); window.setTimeout(() => setPopup(false), 1800); }}
+          onChiudi={CONFIG.popupObbligatorio ? undefined : chiudiPopup}
+        />
+      )}
 
       <footer className="p25-piede">
         <div className="p25-griglia">
@@ -635,67 +676,118 @@ export default function Promo25Page({ track, onLead }: Promo25PageProps) {
   );
 }
 
-/* ---------------- IL MODULO DI CONTATTO ---------------- */
+/* ---------------- I DATI: POPUP ALL'APERTURA E MODULO IN FONDO ---------------- */
 
-function Contatto({ onLead, track }: Promo25PageProps) {
-  const [contatto, setContatto] = useState("");
-  const [privacy, setPrivacy] = useState(false);
+type ModuloProps = Promo25PageProps & { onFatto: (email: string) => void };
+
+const MAIL_OK = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+function Dati({ onLead, track, onFatto, origine, bottone }: ModuloProps & { origine: Lead["origine"]; bottone: string }) {
+  const [nome, setNome] = useState("");
+  const [cognome, setCognome] = useState("");
+  const [email, setEmail] = useState("");
   const [novita, setNovita] = useState(false);
   const [stato, setStato] = useState<"fermo" | "invio" | "fatto" | "errore">("fermo");
-
-  const tipo = useMemo<"email" | "telefono" | null>(() => {
-    const v = contatto.trim();
-    if (/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v)) return "email";
-    if (/^\+?[\d\s().-]{8,}$/.test(v) && v.replace(/\D/g, "").length >= 8) return "telefono";
-    return null;
-  }, [contatto]);
+  const pronto = nome.trim().length > 1 && cognome.trim().length > 1 && MAIL_OK.test(email.trim());
 
   const invia = async (e: FormEvent) => {
     e.preventDefault();
-    if (!tipo || !privacy || stato === "invio") return;
+    if (!pronto || stato === "invio") return;
     setStato("invio");
+    const dati: Lead = { nome: nome.trim(), cognome: cognome.trim(), email: email.trim().toLowerCase(), novita, origine };
     try {
-      await onLead?.({ contatto: contatto.trim(), tipo, novita });
-      track?.("promo25_contatto", { tipo });
+      await onLead?.(dati);
+      track?.("promo25_contatto", { origine, novita: novita ? "si" : "no" });
       setStato("fatto");
+      onFatto(dati.email);
     } catch {
       setStato("errore");
     }
   };
 
+  if (stato === "fatto") {
+    return (
+      <div className="p25-dati__fatto" role="status">
+        <span className="p25-dati__spunta" aria-hidden="true"><Icona nome="spunta" /></span>
+        <p><b>Grazie, {nome.trim()}.</b> Ti abbiamo scritto a {email.trim().toLowerCase()}.</p>
+      </div>
+    );
+  }
+
+  return (
+    <form className="p25-dati" onSubmit={invia} noValidate>
+      <div className="p25-dati__coppia">
+        <label className="p25-campo">
+          <span>Nome</span>
+          <input type="text" name="given-name" autoComplete="given-name" value={nome} onChange={(e) => setNome(e.target.value)} maxLength={60} required />
+        </label>
+        <label className="p25-campo">
+          <span>Cognome</span>
+          <input type="text" name="family-name" autoComplete="family-name" value={cognome} onChange={(e) => setCognome(e.target.value)} maxLength={60} required />
+        </label>
+      </div>
+      <label className="p25-campo">
+        <span>Email</span>
+        <input type="email" name="email" inputMode="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nome@azienda.it" maxLength={120} required />
+      </label>
+      <label className="p25-spunta-riga">
+        <input type="checkbox" checked={novita} onChange={(e) => setNovita(e.target.checked)} />
+        <span>Voglio ricevere anche le novità su Miky. Facoltativo.</span>
+      </label>
+      <button className="p25-invia" type="submit" disabled={!pronto || stato === "invio"}>
+        {stato === "invio" ? "Un momento…" : bottone}
+      </button>
+      {stato === "errore" && <p className="p25-errore">Non è partito. Riprova tra un momento.</p>}
+      <p className="p25-dati__nota">
+        Usiamo i tuoi dati per mandarti la mail di benvenuto con PROMO25, come spiega l'<a href={CONFIG.link.privacy}>informativa sulla privacy</a>.
+      </p>
+    </form>
+  );
+}
+
+function Benvenuto({ onLead, track, onFatto, onChiudi }: ModuloProps & { onChiudi?: () => void }) {
+  const scheda = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const prima = document.documentElement.style.overflow;
+    document.documentElement.style.overflow = "hidden";
+    const t = window.setTimeout(() => scheda.current?.querySelector<HTMLInputElement>("input")?.focus({ preventScroll: true }), 450);
+    const tasto = (e: KeyboardEvent) => { if (e.key === "Escape" && onChiudi) onChiudi(); };
+    window.addEventListener("keydown", tasto);
+    return () => { document.documentElement.style.overflow = prima; window.clearTimeout(t); window.removeEventListener("keydown", tasto); };
+  }, [onChiudi]);
+
+  return (
+    <div className="p25-popup" role="dialog" aria-modal="true" aria-labelledby="p25-popup-titolo">
+      <div className="p25-popup__fondo" onClick={onChiudi} aria-hidden="true" />
+      <div className="p25-popup__scheda" ref={scheda}>
+        {onChiudi && (
+          <button className="p25-popup__chiudi" type="button" onClick={onChiudi} aria-label="Chiudi">
+            <Icona nome="chiudi" />
+          </button>
+        )}
+        <p className="p25-popup__occhiello">Riservato a chi era all'incontro</p>
+        <h2 className="p25-popup__titolo" id="p25-popup-titolo">Benvenuto. Il tuo prezzo è già pronto.</h2>
+        <p className="p25-popup__testo">
+          Lascia nome e mail: ti scriviamo subito con PROMO25, {CONFIG.prezzoPromo} invece di {CONFIG.prezzoPieno}, valida fino a giovedì 8 ottobre.
+        </p>
+        <Dati onLead={onLead} track={track} onFatto={onFatto} origine="popup" bottone="Entra" />
+        {onChiudi && (
+          <button className="p25-popup__salta" type="button" onClick={onChiudi}>Guardo prima la pagina</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Contatto({ onLead, track, onFatto }: ModuloProps) {
   return (
     <section className="p25-sezione p25-carta p25-contatto">
       <div className="p25-griglia p25-griglia--modulo">
         <div className="p25-modulo p25-entra">
-          {stato === "fatto" ? (
-            <>
-              <h2 className="p25-h3">Fatto.</h2>
-              <p className="p25-didascalia">Ti mandiamo il video e il link per prenotare. PROMO25 resta valida fino a giovedì 8 ottobre alle 23:59.</p>
-            </>
-          ) : (
-            <>
-              <h2 className="p25-h3">Non è il momento?</h2>
-              <p className="p25-didascalia">Lasciaci la mail o il numero. Ti mandiamo il video e il link, così ci pensi con calma prima che scada PROMO25.</p>
-              <form onSubmit={invia} noValidate>
-                <label className="p25-campo">
-                  <span>Mail o numero di telefono</span>
-                  <input type="text" autoComplete="email" value={contatto} onChange={(e) => setContatto(e.target.value)} placeholder="nome@esempio.it" maxLength={120} />
-                </label>
-                <label className="p25-spunta-riga">
-                  <input type="checkbox" checked={privacy} onChange={(e) => setPrivacy(e.target.checked)} />
-                  <span>Ho letto l'<a href={CONFIG.link.privacy}>informativa sulla privacy</a>. Usate il mio contatto per mandarmi il video e il link.</span>
-                </label>
-                <label className="p25-spunta-riga">
-                  <input type="checkbox" checked={novita} onChange={(e) => setNovita(e.target.checked)} />
-                  <span>Voglio ricevere anche le novità su Miky. Facoltativo.</span>
-                </label>
-                <button className="p25-invia" type="submit" disabled={!tipo || !privacy || stato === "invio"}>
-                  {stato === "invio" ? "Un momento…" : "Mandamelo"}
-                </button>
-                {stato === "errore" && <p className="p25-errore">Non è partito. Riprova tra un momento.</p>}
-              </form>
-            </>
-          )}
+          <h2 className="p25-h3">Non è il momento?</h2>
+          <p className="p25-didascalia">Lasciaci nome e mail. Ti mandiamo il video e il link, così ci pensi con calma prima che scada PROMO25.</p>
+          <Dati onLead={onLead} track={track} onFatto={onFatto} origine="fondo" bottone="Mandamelo" />
         </div>
       </div>
     </section>

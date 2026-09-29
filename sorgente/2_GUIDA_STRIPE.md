@@ -48,6 +48,10 @@ Poi rifai il prodotto e il link in modalità reale e metti nella pagina **il lin
 
 Payment Links → apri il link di PROMO25 → **Disattiva**. La pagina alle 23:59 dell'8 rimanda già al sito, ma chi ha salvato il link di Stripe potrebbe ancora pagare: disattivarlo lo chiude davvero.
 
-## 5. Una cosa che manca
+## 5. I pagamenti nell'admin
 
-Questi pagamenti **non passano** dalla funzione `stripe-webhook` del sito come le prenotazioni da 50 €: non finiscono nel pannello admin e non partono le mail di conferma di Miky. La ricevuta di Stripe arriva lo stesso. Per una settimana si gestiscono dal pannello di Stripe (Pagamenti, filtro per il prodotto). Se volete che compaiano anche nell'admin, è una modifica al webhook da far rivedere a Tony.
+Il prompt per Lovable chiede di aggiungere al webhook `stripe-webhook` il riconoscimento dei pagamenti PROMO25, così nell'admin ogni contatto risulta «ha pagato» quando paga. Perché funzioni, nel pannello di Stripe il webhook del sito deve ricevere anche l'evento `checkout.session.completed` (Sviluppatori → Webhook → il webhook del sito → Eventi). Se c'è già, non serve fare altro.
+
+Il collegamento fra contatto e pagamento passa dall'email. La pagina mette nel link di Stripe l'email lasciata nel popup, quindi chi paga la trova già scritta. Se la cambia a mano, il pagamento compare nell'admin come contatto nuovo con origine «stripe».
+
+Il webhook è codice che tocca anche le prenotazioni da 50 €: prima di pubblicare conviene farlo rivedere a Tony.

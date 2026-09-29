@@ -22,6 +22,10 @@ La pagina PROMO25 è pronta, ma alcune cose che dice sono promesse commerciali e
 
 8. **Il nome Confcommercio non compare nella pagina.** La pagina dice «Riservato a chi era all'incontro» e basta. Scrivere Confcommercio accanto a un'offerta farebbe pensare a una convenzione con loro, e questo si può fare solo se l'hanno approvato. Se c'è un accordo, si aggiunge in una riga.
 
+9. **Il popup e la privacy.** Il popup chiede nome, cognome ed email senza doppia conferma, e la mail di benvenuto parte subito. Questo va bene perché è la persona a chiederla. Le novità su Miky invece restano una spunta a parte, vuota di partenza, perché per mandare newsletter serve un consenso separato. L'informativa sulla privacy del sito deve citare anche questa raccolta (nome, cognome, email, per la promozione PROMO25): va controllata.
+
+10. **La mail di benvenuto promette il rimborso.** Il testo dice «se cambi idea prima della spedizione ti rimborsiamo tutto», come la pagina. Vale la stessa decisione del punto 2: se P49 non la conferma, va tolta anche dalla mail.
+
 ## Il giorno dell'incontro
 
 - Scrivere i tag NFC con `https://miky.ai/promo25` solo dopo aver provato la pagina online, e bloccarli.
